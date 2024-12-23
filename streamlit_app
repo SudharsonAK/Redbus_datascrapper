@@ -1,0 +1,323 @@
+import streamlit as st
+import pymysql
+import pandas as pd
+import re
+from streamlit_option_menu import option_menu
+from datetime import datetime, timedelta
+
+# Initialize session state for booking
+if 'booking_stage' not in st.session_state:
+    st.session_state.booking_stage = None
+if 'selected_bus' not in st.session_state:
+    st.session_state.selected_bus = None
+if 'booking_details' not in st.session_state:
+    st.session_state.booking_details = {}
+
+# Function to reset booking
+def reset_booking():
+    st.session_state.booking_stage = None
+    st.session_state.selected_bus = None
+    st.session_state.booking_details = {}
+
+# Function to start booking
+def start_booking(bus_data):
+    st.session_state.booking_stage = 'passenger_details'
+    st.session_state.selected_bus = bus_data
+    st.experimental_rerun()
+
+# Enhanced data fetching with error handling
+@st.cache_data
+def get_data(query="SELECT * FROM new_bus_details_1;"):
+    try:
+        conn = pymysql.connect(
+            host="127.0.0.1",
+            user="root",
+            password="",
+            database="redbus"
+        )
+        data = pd.read_sql(query, conn)
+        conn.close()
+        return data
+    except Exception as e:
+        st.error(f"Database Error: {str(e)}")
+        return pd.DataFrame()
+
+# Custom CSS with modern design
+st.markdown("""
+    <style>
+    /* Main container */
+    .main {
+        padding: 2rem;
+        background-color: #f8f9fa;
+    }
+    
+    /* Headers */
+    h1, h2, h3 {
+        color: #dc3545;
+        font-family: 'Helvetica Neue', sans-serif;
+    }
+    
+    /* Cards */
+    div.css-1r6slb0 {
+        background-color: white;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin: 10px 0;
+    }
+    
+    /* Buttons */
+    .stButton>button {
+        background-color: #dc3545;
+        color: white;
+        border-radius: 20px;
+        padding: 0.5rem 2rem;
+        border: none;
+        transition: all 0.3s;
+        width: 100%;
+    }
+    
+    .stButton>button:hover {
+        background-color: #c82333;
+        transform: translateY(-2px);
+    }
+    
+    /* Bus card */
+    .bus-card {
+        background-color: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin: 10px 0;
+    }
+    
+    /* Success messages */
+    .stSuccess {
+        background-color: #28a745;
+        padding: 1rem;
+        border-radius: 5px;
+        color: white;
+    }
+    
+    /* Warning messages */
+    .stWarning {
+        background-color: #ffc107;
+        padding: 1rem;
+        border-radius: 5px;
+        color: black;
+    }
+    
+    /* Custom metric container */
+    .metric-container {
+        background-color: white;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        text-align: center;
+        margin: 10px 0;
+    }
+    
+    .metric-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #dc3545;
+    }
+    
+    .metric-label {
+        font-size: 14px;
+        color: #666;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# App Header
+st.title("🚌 Redbus Premium Booking")
+
+# Navigation
+with st.sidebar:
+    selected = option_menu(
+        "Main Menu",
+        ["Dashboard", "Search & Book", "My Bookings", "Analytics"],
+        icons=["speedometer2", "search", "ticket", "graph-up"],
+        menu_icon="list",
+        default_index=0,
+        styles={
+            "container": {"padding": "5!important", "background-color": "#f8f9fa"},
+            "icon": {"color": "orange", "font-size": "25px"}, 
+            "nav-link": {"font-size": "16px", "text-align": "left", "margin":"0px"},
+            "nav-link-selected": {"background-color": "#dc3545"},
+        }
+    )
+
+# Fetch data
+data = get_data()
+
+if not data.empty:
+    if selected == "Dashboard":
+        st.header("📊 Dashboard")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown(f"""
+                <div class='metric-container'>
+                    <div class='metric-value'>{len(data['Route_name'].unique())}</div>
+                    <div class='metric-label'>Total Routes</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+        with col2:
+            st.markdown(f"""
+                <div class='metric-container'>
+                    <div class='metric-value'>₹{data['Price'].mean():.0f}</div>
+                    <div class='metric-label'>Average Price</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+        with col3:
+            st.markdown(f"""
+                <div class='metric-container'>
+                    <div class='metric-value'>{len(data)}</div>
+                    <div class='metric-label'>Available Buses</div>
+                </div>
+            """, unsafe_allow_html=True)
+
+        st.subheader("Price Distribution by Bus Type")
+        st.bar_chart(data.groupby('Bus_type')['Price'].mean())
+        
+        st.subheader("Popular Routes")
+        route_data = pd.DataFrame(data['Route_name'].value_counts().head(10))
+        st.bar_chart(route_data)
+
+    elif selected == "Search & Book":
+        if st.session_state.booking_stage is None:
+            st.header("🎫 Book Your Journey")
+            
+            # Search Interface
+            col1, col2 = st.columns(2)
+            with col1:
+                route_names = data['Route_name'].unique()
+                selected_route = st.selectbox("Select Route", options=route_names,
+                                            help="Choose your travel route")
+                
+            with col2:
+                travel_date = st.date_input("Select Travel Date",
+                                          min_value=datetime.now().date(),
+                                          max_value=datetime.now().date() + timedelta(days=30))
+            
+            # Advanced Filters
+            with st.expander("Advanced Filters"):
+                col3, col4 = st.columns(2)
+                with col3:
+                    price_range = st.slider("Price Range (₹)",
+                                          min_value=int(data['Price'].min()),
+                                          max_value=int(data['Price'].max()),
+                                          value=(int(data['Price'].min()), int(data['Price'].max())))
+                with col4:
+                    min_rating = st.slider("Minimum Rating", 1.0, 5.0, 3.0)
+            
+            # Filter and Display Results
+            filtered_data = data[
+                (data['Route_name'] == selected_route) &
+                (data['Price'].between(price_range[0], price_range[1])) &
+                (data['Ratings'] >= min_rating)
+            ]
+            
+            if not filtered_data.empty:
+                st.subheader("Available Buses")
+                for idx, bus in filtered_data.iterrows():
+                    with st.container():
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            st.markdown(f"""
+                                <div class='bus-card'>
+                                    <h3>{bus['Bus_type']}</h3>
+                                    <p>Duration: {bus['Total_duration']}</p>
+                                    <p>Price: ₹{bus['Price']}</p>
+                                    <p>Rating: {"⭐" * int(bus['Ratings'])}</p>
+                                    <p>Seats Available: {bus['Seats_Available']}</p>
+                                </div>
+                            """, unsafe_allow_html=True)
+                        with col2:
+                            if st.button("Book Now", key=f"book_{idx}"):
+                                start_booking(bus)
+            else:
+                st.warning("No buses found matching your criteria.")
+                
+        elif st.session_state.booking_stage == 'passenger_details':
+            st.header("Passenger Details")
+            bus = st.session_state.selected_bus
+            
+            # Display selected bus details
+            st.subheader("Selected Bus Details")
+            st.write(f"Route: {bus['Route_name']}")
+            st.write(f"Bus Type: {bus['Bus_type']}")
+            st.write(f"Price: ₹{bus['Price']}")
+            st.write(f"Duration: {bus['Total_duration']}")
+            
+            # Passenger Form
+            with st.form("passenger_form"):
+                name = st.text_input("Passenger Name*")
+                email = st.text_input("Email*")
+                phone = st.text_input("Phone Number*")
+                seats = st.number_input("Number of Seats", 1, 5, 1)
+                total_amount = bus['Price'] * seats
+                st.write(f"Total Amount: ₹{total_amount}")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.form_submit_button("Confirm Booking"):
+                        if name and email and phone:
+                            st.session_state.booking_details = {
+                                'name': name,
+                                'email': email,
+                                'phone': phone,
+                                'seats': seats,
+                                'total_amount': total_amount,
+                                'bus_details': bus
+                            }
+                            st.success(f"""
+                                Booking Confirmed!
+                                - Passenger: {name}
+                                - Total Amount: ₹{total_amount}
+                                - Bus Type: {bus['Bus_type']}
+                                - Route: {bus['Route_name']}
+                            """)
+                            st.balloons()
+                            st.session_state.booking_stage = 'confirmation'
+                        else:
+                            st.error("Please fill all required fields")
+                
+                with col2:
+                    if st.form_submit_button("Cancel"):
+                        reset_booking()
+                        st.experimental_rerun()
+        
+        elif st.session_state.booking_stage == 'confirmation':
+            st.success("Booking Completed Successfully!")
+            if st.button("Book Another Ticket"):
+                reset_booking()
+                st.experimental_rerun()
+
+    elif selected == "My Bookings":
+        st.header("📋 My Bookings")
+        st.info("Your booking history will appear here. Feature coming soon!")
+
+    elif selected == "Analytics":
+        st.header("📊 Travel Analytics")
+        
+        st.subheader("Price Analysis")
+        st.line_chart(data.groupby('Bus_type')['Price'].mean())
+        
+        st.subheader("Ratings Distribution")
+        ratings_data = pd.DataFrame(data['Ratings'].value_counts().sort_index())
+        st.bar_chart(ratings_data)
+
+else:
+    st.error("Unable to fetch data. Please check your database connection.")
+
+# Footer
+st.markdown("""
+    <div style='background-color: #f8f9fa; padding: 1rem; text-align: center; margin-top: 2rem;'>
+        <p style='margin: 0;'>Redbus Premium Booking | Made with ❤️ using Streamlit</p>
+    </div>
+    """, unsafe_allow_html=True)
