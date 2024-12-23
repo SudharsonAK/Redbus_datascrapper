@@ -1,0 +1,167 @@
+#with all kerala links
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+import time
+import csv
+
+# Initialize the Selenium WebDriver
+driver = webdriver.Chrome()
+
+# List of URLs to scrape
+urls = [
+    'https://www.redbus.in/bus-tickets/bangalore-to-kozhikode',
+    'https://www.redbus.in/bus-tickets/kozhikode-to-ernakulam',
+    'https://www.redbus.in/bus-tickets/kozhikode-to-bangalore',
+    'https://www.redbus.in/bus-tickets/ernakulam-to-kozhikode',
+    'https://www.redbus.in/bus-tickets/mysore-to-kozhikode',
+    'https://www.redbus.in/bus-tickets/bangalore-to-kannur',
+    'https://www.redbus.in/bus-tickets/kozhikode-to-mysore',
+    'https://www.redbus.in/bus-tickets/bangalore-to-kalpetta',
+    'https://www.redbus.in/bus-tickets/kozhikode-to-thrissur',
+    'https://www.redbus.in/bus-tickets/kalpetta-to-bangalore',
+    'https://www.redbus.in/bus-tickets/thrissur-to-ernakulam',
+    'https://www.redbus.in/bus-tickets/ernakulam-to-thiruvananthapuram',
+    'https://www.redbus.in/bus-tickets/ernakulam-to-thrissur',
+    'https://www.redbus.in/bus-tickets/thiruvananthapuram-to-ernakulam',
+    'https://www.redbus.in/bus-tickets/ernakulam-to-alapuzha',
+    'https://www.redbus.in/bus-tickets/thrissur-to-ernakulam',
+    'https://www.redbus.in/bus-tickets/ernakulam-to-thiruvananthapuram',
+    'https://www.redbus.in/bus-tickets/ernakulam-to-thrissur',
+    'https://www.redbus.in/bus-tickets/thiruvananthapuram-to-ernakulam',
+    'https://www.redbus.in/bus-tickets/ernakulam-to-alapuzha',
+    'https://www.redbus.in/bus-tickets/alapuzha-to-thiruvananthapuram',
+    'https://www.redbus.in/bus-tickets/ernakulam-to-kollam',
+    'https://www.redbus.in/bus-tickets/alapuzha-to-kollam',
+    'https://www.redbus.in/bus-tickets/kollam-to-thiruvananthapuram',
+    'https://www.redbus.in/bus-tickets/thrissur-to-thiruvananthapuram',
+    'https://www.redbus.in/bus-tickets/bangalore-to-chennai',
+    'https://www.redbus.in/bus-tickets/hyderabad-to-bangalore',
+    'https://www.redbus.in/bus-tickets/pune-to-bangalore',
+    'https://www.redbus.in/bus-tickets/mumbai-to-bangalore'
+]
+
+# Function to scroll down and load dynamic content (infinite scroll)
+def scroll_to_load(driver, scroll_pause_time=2, max_scrolls=10):
+    # Get initial page height
+    last_height = driver.execute_script("return document.body.scrollHeight")
+    
+    # Scroll down to load more content
+    for _ in range(max_scrolls):
+        # Scroll down
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(scroll_pause_time)  # Wait for the new content to load
+        
+        # Check the new page height
+        new_height = driver.execute_script("return document.body.scrollHeight")
+        if new_height == last_height:  # If no new content is loaded, stop scrolling
+            break
+        last_height = new_height
+
+# Extracting bus details
+def extract_bus_details(driver):
+    bus_details = []
+    
+    # Find all bus items
+    bus_items = driver.find_elements(By.XPATH, '//div[@class="clearfix bus-item-details"]')
+    
+    # Loop through each bus item and extract the details
+    for bus in bus_items:
+        details = {}
+        
+        try:
+            details['bus_name'] = bus.find_element(By.XPATH, './/div[@class="travels lh-24 f-bold d-color"]').text
+        except:
+            details['bus_name'] = None
+        
+        try:
+            details['bus_type'] = bus.find_element(By.XPATH, './/div[@class="bus-type f-12 m-top-16 l-color evBus"]').text
+        except:
+            details['bus_type'] = None
+        
+        try:
+            details['departure_time'] = bus.find_element(By.XPATH, './/div[@class="dp-time f-19 d-color f-bold"]').text
+        except:
+            details['departure_time'] = None
+        
+        try:
+            details['departure_location'] = bus.find_element(By.XPATH, './/div[@class="dp-loc l-color w-wrap f-12 m-top-42"]').text
+        except:
+            details['departure_location'] = None
+        
+        try:
+            details['duration'] = bus.find_element(By.XPATH, './/div[@class="dur l-color lh-24"]').text
+        except:
+            details['duration'] = None
+        
+        try:
+            details['booking_time'] = bus.find_element(By.XPATH, './/div[@class="bp-time f-19 d-color disp-Inline"]').text
+        except:
+            details['booking_time'] = None
+        
+        try:
+            details['next_day_date'] = bus.find_element(By.XPATH, './/div[@class="next-day-dp-lbl m-top-16"]').text
+        except:
+            details['next_day_date'] = None
+        
+        try:
+            details['booking_location'] = bus.find_element(By.XPATH, './/div[@class="bp-loc l-color w-wrap f-12 m-top-8"]').text
+        except:
+            details['booking_location'] = None
+        
+        try:
+            details['rating'] = bus.find_element(By.XPATH, './/div[@class="rating-sec lh-24"]//span[@class=""]').text
+        except:
+            details['rating'] = None
+        
+        try:
+            details['seats_available'] = bus.find_element(By.XPATH, './/div[@class="seat-left m-top-30"]').text
+        except:
+            details['seats_available'] = None
+        
+        try:
+            details['fare'] = bus.find_element(By.XPATH, './/div[@class="fare d-block"]').text
+        except:
+            details['fare'] = None
+
+        bus_details.append(details)
+    
+    return bus_details
+
+# Function to save data to CSV
+def save_to_csv(bus_details, filename='new_ksrtc.csv'):
+    headers = ['bus_name', 'bus_type', 'departure_time', 'departure_location', 'duration',
+            'booking_time', 'next_day_date', 'booking_location', 'rating', 'seats_available', 'fare']
+    
+    with open(filename, mode='a', newline='', encoding='utf-8') as file:
+        writer = csv.DictWriter(file, fieldnames=headers)
+        
+        # Write the header only if the file is empty
+        if file.tell() == 0:
+            writer.writeheader()
+        
+        for bus in bus_details:
+            writer.writerow(bus)
+
+# Iterate through the URLs and scrape data
+all_bus_details = []
+
+for url in urls:
+    driver.get(url)
+    driver.implicitly_wait(10)
+    
+    # Scroll to load all bus details
+    scroll_to_load(driver)
+    
+    # Extract bus details
+    bus_details = extract_bus_details(driver)
+    all_bus_details.extend(bus_details)
+
+# Save all the bus details to CSV with the new file name
+save_to_csv(all_bus_details)
+
+# Optionally print the extracted data
+for detail in all_bus_details:
+    print(detail)
+
+# Close the driver
+driver.quit()
